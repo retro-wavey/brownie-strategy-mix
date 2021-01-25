@@ -200,7 +200,7 @@ contract Strategy is BaseStrategy {
         if (_debtOutstanding > 0) {
             (uint256 _amountFreed, uint256 _reportLoss) = liquidatePosition(_debtOutstanding);
             _debtPayment = _amountFreed > _debtOutstanding? _debtOutstanding : _amountFreed;
-			_loss = _reportLoss;
+            _loss = _reportLoss;
         }
 		
         // Claim profit
