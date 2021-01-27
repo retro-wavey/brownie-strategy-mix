@@ -8,79 +8,114 @@ import time
 from brownie import Wei, accounts, Contract, config, interface, chain
 from brownie import Strategy
 
-def test_operation(pm):
-      
-    wbtcAddr = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
-    depositAmount = 1000000 # 0.01 wbtc with decimal is 8
-    wbtc = interface.IERC20(wbtcAddr)
+@pytest.mark.require_network("mainnet-fork")
+def test_normal_flow(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWbtcStrategy):
+         
+    # store original balance too compare
+    prevBal = wbtcToken.balanceOf(wbtcWhale) 
     
-    # assume this is also a keeper for Mushrooms vault/strategy and enough eth for contract deployment
-    tester = accounts.add('27cdd8910449bea9f4e61e6c1ffb2cd173bebf59b7fe7c923a5851b2df4c6e66')
-    gov = tester    
-    prevBal = wbtc.balanceOf(tester)
+    # deposit -> harvest   
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper)
     
-    # gov: deploy yVault for wbtc
-    vaultLimit = 100000000000000;  # 1 million allowance wbtc with decimal is 8
-    Vault = pm("iearn-finance/yearn-vaults@0.3.0").Vault
-    yWbtc = Vault.deploy({"from": gov})
-    yWbtc.initialize(wbtcAddr, gov, gov, "", "", {"from": gov})
-    yWbtc.setDepositLimit(vaultLimit, {"from": gov}) 
+    # withdraw   
+    _withdrawWbtc(yWbtc, wbtcWhale)    
     
-    ########################################################################
-    ###  yVault : deposit -> harvest
-    ########################################################################
+    # we should have made some profit ignoring the fee
+    postBal = wbtcToken.balanceOf(wbtcWhale) 
+    assert postBal > _deduct_mushrooms_fee(prevBal) 
     
-    # gov: deploy wbtc strategy to yield in Mushrooms
-    strategy = gov.deploy(Strategy, yWbtc)
-    # gov：add strategy with 100% BPS allocation + no rate limit + no fee 
-    yWbtc.addStrategy(strategy, 10_000, 0, 0, {"from": gov})  
-                
-    # deposit want token and yield some    
-    assetTotal = _deposit_and_harvest(yWbtc, strategy, tester, wbtc, depositAmount, vaultLimit, gov, tester, (int)(time.time() + 2592000 * 1))
+@pytest.mark.require_network("mainnet-fork")
+def test_emergency_exit(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWbtcStrategy):
+             
+    # deposit -> harvest   
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper)
     
-    ########################################################################
-    ###  yVault : migration
-    ########################################################################
+    # revoke -> emergencyExit -> harvest  
+    yWbtcStrategy.setEmergencyExit({"from": yfiDeployer})
+    yWbtcStrategy.harvest({"from": yfiDeployer})
+    assert yWbtcStrategy.estimatedTotalAssets() == 0
     
-    # gov: deploy a new wbtc strategy for migration
-    strategyNew = gov.deploy(Strategy, yWbtc) 
-       
-    # gov: migrate to new yStrategy
-    yWbtc.migrateStrategy(strategy, strategyNew, {"from": gov})       
-    assetMigrated = strategyNew.estimatedTotalAssets()    
-    assert assetMigrated >= assetTotal
+    # we should have returned almost all fund
+    assert wbtcToken.balanceOf(yWbtc) >= _deduct_mushrooms_fee(depositAmount)
     
-    ########################################################################
-    ###  yVault : withdraw
-    ########################################################################
-        
-    # tester: withdraw all from yVault, possible maxLoss BPS considering withdraw fee (0.2%) from Mushrooms vaults
-    yWbtc.withdraw(depositAmount, tester, 21, {"from": tester})
-    postBal = wbtc.balanceOf(tester)
+@pytest.mark.require_network("mainnet-fork")
+def test_ratio_adjustment(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWbtcStrategy):
+         
+    # deposit -> harvest   
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper)
     
-    # we should have made some profit ignoring the withdraw fee (0.2%) from Mushrooms vaults
-    assert postBal > (prevBal * 0.998) 
+    # lower debtRatio from 10_000 to 5000  
+    assert wbtcToken.balanceOf(yWbtc) == 0
+    yWbtc.updateStrategyDebtRatio(yWbtcStrategy, 5000, {"from": yfiDeployer})
+    yWbtcStrategy.harvest({"from": yfiDeployer})  
     
-def _deposit_and_harvest(yVault, yStrategy, tester, want, depositAmount, allowLimit, yStrategist, mStrategist, endMineTime):
-    # tester: deposit want into yVault
-    want.approve(yVault, 0, {"from": tester})
-    want.approve(yVault, allowLimit, {"from": tester})
-    yVault.deposit(depositAmount, {"from": tester})     
-    assert yVault.balanceOf(tester) == depositAmount 
+    # we should have returned nearly half of fund    
+    assert wbtcToken.balanceOf(yWbtc) >= _deduct_mushrooms_fee(depositAmount) * (5000 / 10_000)
     
-    # yStrategist: transfer want into Mushrooms for yield
-    yStrategy.harvest({"from": yStrategist})
+    # increase debtRatio from 5000 to 7500 
+    yWbtc.updateStrategyDebtRatio(yWbtcStrategy, 7500, {"from": yfiDeployer})
+    yWbtcStrategy.harvest({"from": yfiDeployer})          
+    assert yWbtcStrategy.estimatedTotalAssets() >= _deduct_mushrooms_fee(depositAmount) * (7500 / 10_000)
+    
+@pytest.mark.require_network("mainnet-fork")
+def test_strategy_migration(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWbtcStrategy, yWbtcStrategyNew):
+             
+    # store original balance too compare
+    prevBal = wbtcToken.balanceOf(wbtcWhale)
+    
+    # deposit -> harvest   
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper)
+    
+    # migrate
+    _migrationWbtcStrategy(yWbtc, yWbtcStrategy, yWbtcStrategyNew, yfiDeployer)
+    
+    # withdraw   
+    _withdrawWbtc(yWbtc, wbtcWhale)    
+    
+    # we should have made some profit ignoring the fee
+    postBal = wbtcToken.balanceOf(wbtcWhale) 
+    assert postBal > _deduct_mushrooms_fee(prevBal) 
 
-    # mStrategist: claim yield profit
-    mmVault = interface.MMVault(yStrategy.mmVault())
-    mmVault.earn({"from": mStrategist})    
+
+####################### test dependent functions ########################################
+
+def _deduct_mushrooms_fee(amount):
+    # deduct the withdraw fee (0.2% = 20 BPS) from Mushrooms vaults
+    return amount * 0.998
+    
+def _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper):
+    depositAmount = _depositWbtc(yWbtc, wbtcWhale, wbtcToken)
+    yWbtcStrategy.harvest({"from": yfiDeployer})    
+    _mmEarnAndHarvest(mmKeeper)
+    return depositAmount
+ 
+def _depositWbtc(yWbtc, wbtcWhale, wbtcToken):
+    depositAmount = 1_000_000
+    wbtcToken.approve(yWbtc, 1000_000_000 * 1e18, {"from": wbtcWhale})
+    yWbtc.deposit(depositAmount, {"from": wbtcWhale})     
+    assert yWbtc.balanceOf(wbtcWhale) == depositAmount
+    return depositAmount
+       
+def _mmEarnAndHarvest(mmKeeper):
+    mmWbtcVault = Contract("0xb06661A221Ab2Ec615531f9632D6Dc5D2984179A")  
+    mmWbtcVault.earn({"from": mmKeeper})    
+
+    endMineTime = (int)(time.time() + 2592000 * 1) # mine to 30 days later
     chain.mine(blocks=100, timestamp=endMineTime) 
-    mmStrategy = interface.MMStrategy("0x4047093B9fD3F92415c938d0dC932117c801E08c");
-    mmStrategy.harvest({"from": mStrategist})
     
-    # yStrategist: claim yield profit from Mushrooms vault/strategy and Mushrooms farming pool
-    yStrategy.harvest({"from": yStrategist})
-    
-    return yStrategy.estimatedTotalAssets()
-    
-    
+    mmWbtcStrategy =  Contract("0xc8EBBaAaD5fF2e5683f8313fd4D056b7Ff738BeD") 
+    mmWbtcStrategy.harvest({"from": mmKeeper})  
+
+def _withdrawWbtc(yWbtc, wbtcWhale):
+    shareAmount = yWbtc.balanceOf(wbtcWhale)
+    # possible maxLoss BPS considering withdraw fee (0.2% = 20 BPS) from Mushrooms vaults
+    yWbtc.withdraw(shareAmount, wbtcWhale, 21, {"from": wbtcWhale})     
+    assert yWbtc.balance() == 0
+    assert yWbtc.totalSupply() == 0 
+
+def _migrationWbtcStrategy(yWbtc, yWbtcStrategy, yWbtcStrategyNew, yfiDeployer):      
+    assetTotal = yWbtcStrategy.estimatedTotalAssets()    
+    yWbtc.migrateStrategy(yWbtcStrategy, yWbtcStrategyNew, {"from": yfiDeployer})       
+    assetMigrated = yWbtcStrategyNew.estimatedTotalAssets()    
+    assert assetMigrated >= assetTotal
+

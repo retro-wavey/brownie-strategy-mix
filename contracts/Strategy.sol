@@ -32,25 +32,7 @@ interface IUni{
     ) external returns (uint256[] memory amounts);
 }
 
-interface MMVault {
-    function token() external view returns (address);
-    function getRatio() external view returns (uint256);
-    function deposit(uint256) external;
-    function withdraw(uint256) external;
-    function withdrawAll() external;
-    function earn() external;
-    function balance() external view returns (uint256);
-}
-
-interface MMStrategy {
-    function harvest() external;
-}
-
-interface MMFarmingPool {
-    function deposit(uint256 _pid, uint256 _amount) external;
-    function withdraw(uint256 _pid, uint256 _amount) external;
-    function userInfo(uint256, address) external view returns (uint256 amount, uint256 rewardDebt);
-}
+import "../interfaces/Mushrooms.sol";
 
 /**
  * @title Strategy for Mushrooms WBTC vault/farming pool yield
@@ -78,12 +60,13 @@ contract Strategy is BaseStrategy {
     address constant public mm = address(0xa283aA7CfBB27EF0cfBcb2493dD9F4330E0fd304); //MM
     address public constant usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; //USDC
     address constant public unirouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    address constant public sushiroute = address(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
 
     address constant public weth = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2); 
 
-    address constant public mmVault = address(0xac8bFC8AF8c3D8D5c14C4e165F5AEd66dE4B22bd);// Mushrooms mWBTC vault
-    address constant public mmFarmingPool = address(0xb2682f32ca7BAfb339b310595B852e6dB12fe5f5); //Mushrooms mining MasterChef
-    uint256 constant public mmFarmingPoolId = 3; // Mushrooms farming pool id for mWBTC
+    address constant public mmVault = address(0xb06661A221Ab2Ec615531f9632D6Dc5D2984179A);// Mushrooms mWBTC vault
+    address constant public mmFarmingPool = address(0xf8873a6080e8dbF41ADa900498DE0951074af577); //Mushrooms mining MasterChef
+    uint256 constant public mmFarmingPoolId = 11; // Mushrooms farming pool id for mWBTC
 
     uint256 public minMMToSwap = 1 * 1e18; // min $MM to swap during adjustPosition()
 	
@@ -106,7 +89,9 @@ contract Strategy is BaseStrategy {
      * @param _vault The address of the Vault responsible for this Strategy.
      */
     constructor(address _vault) BaseStrategy(_vault) public {
-        require(address(want) == wbtc, '!wrongVault');
+        require(address(want) == wbtc, '!wrongVault');				
+        want.safeApprove(mmVault, uint256(-1));		
+        IERC20(mmVault).safeApprove(mmFarmingPool, uint256(-1));
     }    
 
     function setMinMMToSwap(uint256 _minMMToSwap) external onlyAuthorized {
@@ -191,11 +176,7 @@ contract Strategy is BaseStrategy {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-    ){
-        _profit = 0;
-        _loss = 0; //for clarity. also reduces bytesize
-        _debtPayment = 0; //for clarity. also reduces bytesize
-		
+    ){		
         // Pay debt if any
         if (_debtOutstanding > 0) {
             (uint256 _amountFreed, uint256 _reportLoss) = liquidatePosition(_debtOutstanding);
@@ -204,10 +185,11 @@ contract Strategy is BaseStrategy {
         }
 		
         // Claim profit
-        MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, 0);
-        uint256 _want = want.balanceOf(address(this));
-        _disposeOfMM();
-        _profit = want.balanceOf(address(this)).sub(_want);
+        uint256 _pendingMM = MMFarmingPool(mmFarmingPool).pendingMM(mmFarmingPoolId, address(this));
+        if (_pendingMM > 0){
+            MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, 0);		
+        }
+        _profit = _disposeOfMM();
 				
         return (_profit, _loss, _debtPayment);
     }
@@ -234,9 +216,6 @@ contract Strategy is BaseStrategy {
         uint256 _want = want.balanceOf(address(this));
         if (_want > _debtOutstanding) {
             _want = _want.sub(_debtOutstanding);
-			
-            want.safeApprove(mmVault, 0);
-            want.safeApprove(mmVault, _want);
             
             MMVault(mmVault).deposit(_want);
             _after = IERC20(mmVault).balanceOf(address(this));
@@ -244,8 +223,6 @@ contract Strategy is BaseStrategy {
         }		
 								
         if (_after > 0){
-            IERC20(mmVault).safeApprove(mmFarmingPool, 0);
-            IERC20(mmVault).safeApprove(mmFarmingPool, _after);
             MMFarmingPool(mmFarmingPool).deposit(mmFarmingPoolId, _after);
         }		            
     }
@@ -262,7 +239,6 @@ contract Strategy is BaseStrategy {
      * NOTE: The invariant `_liquidatedAmount + _loss <= _amountNeeded` should always be maintained
      */
     function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _liquidatedAmount, uint256 _loss){
-        _loss = 0; //for clarity. also reduces bytesize
 		
         uint256 _before = IERC20(want).balanceOf(address(this));
         if (_before < _amountNeeded){	
@@ -376,18 +352,35 @@ contract Strategy is BaseStrategy {
     }
 	
     // swap $MM for $WBTC
-    function _disposeOfMM() internal {
+    function _disposeOfMM() internal returns (uint256){
         uint256 _mm = IERC20(mm).balanceOf(address(this));
-
+        uint256 _wantProfit; 
+		
         if (_mm >= minMMToSwap) {
-            address[] memory path = new address[](4);
-            path[0] = mm;
-            path[1] = usdc;
-            path[2] = weth;
-            path[2] = wbtc;
-
-            IUni(unirouter).swapExactTokensForTokens(_mm, uint256(0), path, address(this), now.add(3600));
+            // intuitively in favor of sushiswap over uniswap if possible for better efficiency and cost
+			
+            address[] memory pathSushi = new address[](3);
+            pathSushi[0] = mm;
+            pathSushi[1] = weth;
+            pathSushi[2] = wbtc;
+            uint256 outputSushi = IUni(sushiroute).getAmountsOut(_mm, pathSushi)[pathSushi.length - 1];
+						            
+            address[] memory pathUni = new address[](4);
+            pathUni[0] = mm;
+            pathUni[1] = usdc;
+            pathUni[2] = weth;
+            pathUni[3] = wbtc;
+            uint256 outputUni = IUni(unirouter).getAmountsOut(_mm, pathUni)[pathUni.length - 1];
+			
+            uint256 _want = want.balanceOf(address(this));
+            if (outputSushi >= outputUni){
+                IUni(sushiroute).swapExactTokensForTokens(_mm, uint256(0), pathSushi, address(this), now);			
+            } else{
+                IUni(unirouter).swapExactTokensForTokens(_mm, uint256(0), pathUni, address(this), now);			
+            }
+            _wantProfit = want.balanceOf(address(this)).sub(_want);
         }
+        return _wantProfit;
     }
 	
     function ethToWant(uint256 _amount) public view returns (uint256) {
