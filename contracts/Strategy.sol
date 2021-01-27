@@ -211,7 +211,7 @@ contract Strategy is BaseStrategy {
         }
 		
         uint256 _before = IERC20(mmVault).balanceOf(address(this));
-        uint256 _after = _before;
+        uint256 _after = _before;	
 		
         uint256 _want = want.balanceOf(address(this));
         if (_want > _debtOutstanding) {
@@ -220,6 +220,8 @@ contract Strategy is BaseStrategy {
             MMVault(mmVault).deposit(_want);
             _after = IERC20(mmVault).balanceOf(address(this));
             require(_after > _before, '!mismatchDepositIntoMushrooms');
+        } else if(_debtOutstanding > _want){
+            return;		
         }		
 								
         if (_after > 0){
