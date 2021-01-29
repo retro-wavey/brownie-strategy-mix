@@ -1,5 +1,6 @@
 import pytest
-from brownie import config
+from brownie import config, accounts, Contract, chain, interface
+from brownie import Strategy
 
 @pytest.fixture
 def andre(accounts):
@@ -115,3 +116,46 @@ def whale(accounts, andre, token, vault):
     # Deposit half their stack
     vault.deposit(bal // 2, {"from": a})
     yield a
+
+
+########################################################################################
+########## Mushrooms Integration: tests dependent fixtures
+########################################################################################
+
+@pytest.fixture
+def yfiDeployer(accounts):
+    yield accounts.at("0x2D407dDb06311396fE14D4b49da5F0471447d45C", force=True)
+
+@pytest.fixture
+def wbtcWhale(accounts):
+    yield accounts.at("0x875abe6F1E2Aba07bED4A3234d8555A0d7656d12", force=True)
+    
+@pytest.fixture
+def mmKeeper(accounts):
+    yield accounts.at("0x7cDaCBa026DDdAa0bD77E63474425f630DDf4A0D", force=True)
+    
+@pytest.fixture
+def wbtcToken(Contract, wbtcWhale):
+    wbtcToken = Contract("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599") 
+    yield wbtcToken
+
+@pytest.fixture
+def yWbtc(pm, yfiDeployer, wbtcToken):
+    vaultLimit = 1000_000_000 * 1e8
+    Vault = pm("iearn-finance/yearn-vaults@0.3.0").Vault
+    yWbtc = yfiDeployer.deploy(Vault) 
+    yWbtc.initialize(wbtcToken, yfiDeployer, yfiDeployer, "", "", {"from": yfiDeployer})
+    yWbtc.setDepositLimit(vaultLimit, {"from": yfiDeployer}) 
+    yield yWbtc
+ 
+@pytest.fixture
+def yWbtcStrategy(yfiDeployer, yWbtc):
+    yWbtcStrategy = yfiDeployer.deploy(Strategy, yWbtc)
+    yWbtc.addStrategy(yWbtcStrategy, 10_000, 0, 0, {"from": yfiDeployer})  
+    yield yWbtcStrategy
+ 
+@pytest.fixture 
+def yWbtcStrategyNew(yfiDeployer, yWbtc):
+    yWbtcStrategyNew = yfiDeployer.deploy(Strategy, yWbtc)  
+    yield yWbtcStrategyNew 
+   
