@@ -20,10 +20,10 @@ def test_normal_flow(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWb
     # Advancing blocks    
     chain.mine(blocks=300)   
     assert wbtcToken.balanceOf(yWbtc) == 0 # we already ape all in
-    assert interface.MMFarmingPool("0xb2682f32ca7BAfb339b310595B852e6dB12fe5f5").pendingMM(3, yWbtcStrategy) > 0 # should have $MM to claim
+    assert interface.MMFarmingPool("0xf8873a6080e8dbF41ADa900498DE0951074af577").pendingMM(11, yWbtcStrategy) > 0 # should have $MM to claim
     tx = yWbtcStrategy.harvest({"from": yfiDeployer})      
     assert len(tx.events['StrategyReported']) == 1 # we did the due report 
-    assert interface.MMFarmingPool("0xb2682f32ca7BAfb339b310595B852e6dB12fe5f5").pendingMM(3, yWbtcStrategy) == 0  # NO $MM left to claim
+    assert interface.MMFarmingPool("0xf8873a6080e8dbF41ADa900498DE0951074af577").pendingMM(11, yWbtcStrategy) == 0  # NO $MM left to claim
     assert interface.IERC20("0xa283aA7CfBB27EF0cfBcb2493dD9F4330E0fd304").balanceOf(yWbtcStrategy) == 0 # NO $MM left to swap
     assert wbtcToken.balanceOf(yWbtc) > 0 # Aha, we got vault appreciation by swapping $MM to want!
     
