@@ -15,7 +15,17 @@ def test_normal_flow(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWb
     prevBal = wbtcToken.balanceOf(wbtcWhale) 
     
     # deposit -> harvest   
-    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper)
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper, 10_000_000)
+                
+    # Advancing blocks    
+    chain.mine(blocks=300)   
+    assert wbtcToken.balanceOf(yWbtc) == 0 # we already ape all in
+    assert interface.MMFarmingPool("0xb2682f32ca7BAfb339b310595B852e6dB12fe5f5").pendingMM(3, yWbtcStrategy) > 0 # should have $MM to claim
+    tx = yWbtcStrategy.harvest({"from": yfiDeployer})      
+    assert len(tx.events['StrategyReported']) == 1 # we did the due report 
+    assert interface.MMFarmingPool("0xb2682f32ca7BAfb339b310595B852e6dB12fe5f5").pendingMM(3, yWbtcStrategy) == 0  # NO $MM left to claim
+    assert interface.IERC20("0xa283aA7CfBB27EF0cfBcb2493dD9F4330E0fd304").balanceOf(yWbtcStrategy) == 0 # NO $MM left to swap
+    assert wbtcToken.balanceOf(yWbtc) > 0 # Aha, we got vault appreciation by swapping $MM to want!
     
     # withdraw   
     _withdrawWbtc(yWbtc, wbtcWhale)    
@@ -83,15 +93,14 @@ def _deduct_mushrooms_fee(amount):
     # deduct the withdraw fee (0.2% = 20 BPS) from Mushrooms vaults
     return amount * 0.998
     
-def _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper):
-    depositAmount = _depositWbtc(yWbtc, wbtcWhale, wbtcToken)
+def _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper, depositAmount=1_000_000):
+    depositAmount = _depositWbtc(yWbtc, wbtcWhale, wbtcToken, depositAmount)
     yWbtcStrategy.harvest({"from": yfiDeployer})    
     _mmEarnAndHarvest(mmKeeper)
     return depositAmount
  
-def _depositWbtc(yWbtc, wbtcWhale, wbtcToken):
-    depositAmount = 1_000_000
-    wbtcToken.approve(yWbtc, 1000_000_000 * 1e18, {"from": wbtcWhale})
+def _depositWbtc(yWbtc, wbtcWhale, wbtcToken, depositAmount):
+    wbtcToken.approve(yWbtc, 1000_000_000_000 * 1e18, {"from": wbtcWhale})
     yWbtc.deposit(depositAmount, {"from": wbtcWhale})     
     assert yWbtc.balanceOf(wbtcWhale) == depositAmount
     return depositAmount
