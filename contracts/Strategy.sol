@@ -68,7 +68,7 @@ contract Strategy is BaseStrategy {
     address constant public mmFarmingPool = address(0xf8873a6080e8dbF41ADa900498DE0951074af577); //Mushrooms mining MasterChef
     uint256 constant public mmFarmingPoolId = 11; // Mushrooms farming pool id for mWBTC
 
-    uint256 public minMMToSwap = 1 * 1e1; // min $MM to swap during adjustPosition()
+    uint256 public minMMToSwap = 1; // min $MM to swap during adjustPosition()
 	
     /**
      * @notice This Strategy's name.
