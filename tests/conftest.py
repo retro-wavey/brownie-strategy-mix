@@ -124,7 +124,7 @@ def whale(accounts, andre, token, vault):
 
 @pytest.fixture
 def yfiDeployer(accounts):
-    yield accounts.at("0x2D407dDb06311396fE14D4b49da5F0471447d45C", force=True)
+    yield accounts.at("0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7", force=True) # YFI dev multisig
 
 @pytest.fixture
 def wbtcWhale(accounts):
@@ -135,9 +135,20 @@ def mmKeeper(accounts):
     yield accounts.at("0x7cDaCBa026DDdAa0bD77E63474425f630DDf4A0D", force=True)
     
 @pytest.fixture
-def wbtcToken(Contract, wbtcWhale):
-    wbtcToken = Contract("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599") 
-    yield wbtcToken
+def wbtcToken(interface):
+    yield interface.IERC20("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599")
+    
+@pytest.fixture
+def mmFarmingPool(interface):
+    yield interface.MMFarmingPool("0xf8873a6080e8dbF41ADa900498DE0951074af577")
+    
+@pytest.fixture
+def mmVault(interface):
+    yield interface.MMVault("0xb06661A221Ab2Ec615531f9632D6Dc5D2984179A")
+    
+@pytest.fixture
+def mmStrategy(interface):
+    yield interface.MMStrategy("0xc8EBBaAaD5fF2e5683f8313fd4D056b7Ff738BeD")
 
 @pytest.fixture
 def yWbtc(pm, yfiDeployer, wbtcToken):

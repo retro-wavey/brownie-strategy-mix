@@ -246,6 +246,7 @@ contract Strategy is BaseStrategy {
 		
         uint256 _before = IERC20(want).balanceOf(address(this));
         if (_before < _amountNeeded){	
+            bool liquidateAll = _amountNeeded >= estimatedTotalAssets()? true : false;
             uint256 _gap = _amountNeeded.sub(_before);	
             uint256 _mShare = _gap.mul(1e18).div(MMVault(mmVault).getRatio());
 			
@@ -256,17 +257,18 @@ contract Strategy is BaseStrategy {
                 (uint256 _mToken, ) = MMFarmingPool(mmFarmingPool).userInfo(mmFarmingPoolId, address(this));
                 require(_mToken >= _mvGap, '!insufficientMTokenInMasterChef');
 		
-                MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, _mvGap);
-                require(IERC20(mmVault).balanceOf(address(this)) >= _mShare, '!mismatchFarmingPoolWithdraw');		
+                MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, liquidateAll? _mToken : _mvGap);
+                require(IERC20(mmVault).balanceOf(address(this)) >= _mShare, '!mismatchFarmingPoolWithdraw');
             }	
         
-            MMVault(mmVault).withdraw(_mShare);
+            MMVault(mmVault).withdraw(liquidateAll? IERC20(mmVault).balanceOf(address(this)) : _mShare);
             uint256 _after = IERC20(want).balanceOf(address(this));
             require(_after > _before, '!mismatchMushroomsVaultWithdraw');
 
-            _liquidatedAmount = _after.sub(_before);
+            _liquidatedAmount = _after;
             _loss = _amountNeeded > _liquidatedAmount? _amountNeeded.sub(_liquidatedAmount): 0; // due to possible withdrawal fee
-            return (_liquidatedAmount, _loss);		
+            require(_liquidatedAmount + _loss <= _amountNeeded);
+            return (_liquidatedAmount, liquidateAll? 0 : _loss);		
         } else{
             return (_amountNeeded, _loss);
         }
