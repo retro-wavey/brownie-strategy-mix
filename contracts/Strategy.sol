@@ -355,6 +355,9 @@ contract Strategy is BaseStrategy {
 	
     function _convertMTokenToWant(uint256 _shares) internal view returns (uint256){
         uint256 _mTokenTotal = IERC20(mmVault).totalSupply();
+        if (_mTokenTotal == 0){
+            return 0;
+        }
         uint256 _wantInVault = MMVault(mmVault).balance();
         return (_wantInVault.mul(_shares)).div(_mTokenTotal);
     }
