@@ -153,7 +153,7 @@ def mmStrategy(interface):
 @pytest.fixture
 def yWbtc(pm, yfiDeployer, wbtcToken):
     vaultLimit = 1000_000_000 * 1e8
-    Vault = pm("iearn-finance/yearn-vaults@0.3.0").Vault
+    Vault = pm("iearn-finance/yearn-vaults@0.3.2").Vault
     yWbtc = yfiDeployer.deploy(Vault) 
     yWbtc.initialize(wbtcToken, yfiDeployer, yfiDeployer, "", "", {"from": yfiDeployer})
     yWbtc.setDepositLimit(vaultLimit, {"from": yfiDeployer}) 
@@ -162,7 +162,9 @@ def yWbtc(pm, yfiDeployer, wbtcToken):
 @pytest.fixture
 def yWbtcStrategy(yfiDeployer, yWbtc):
     yWbtcStrategy = yfiDeployer.deploy(Strategy, yWbtc)
-    yWbtc.addStrategy(yWbtcStrategy, 10_000, 0, 0, {"from": yfiDeployer})  
+    yWbtc.addStrategy(yWbtcStrategy, 10_000, 0, yWbtc.depositLimit(), 0, {"from": yfiDeployer})  
+    vaultVersion = yWbtc.apiVersion()
+    assert vaultVersion == "0.3.2"
     yield yWbtcStrategy
  
 @pytest.fixture 
