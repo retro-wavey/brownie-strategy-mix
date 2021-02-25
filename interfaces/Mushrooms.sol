@@ -34,6 +34,7 @@ interface MMController {
     function approveStrategy(address _token, address _strategy) external;
     function setStrategy(address _token, address _strategy) external;
     function setVault(address _token, address _vault) external;
+    function withdrawAll(address _token) external;
 }
 
 interface MMTimelock {
