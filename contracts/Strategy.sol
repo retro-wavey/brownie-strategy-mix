@@ -69,6 +69,7 @@ contract Strategy is BaseStrategy {
     uint256 constant public mmFarmingPoolId = 11; // Mushrooms farming pool id for mWBTC
 
     uint256 public minMMToSwap = 1; // min $MM to swap during adjustPosition()
+    uint256 public minShareToProfit = 1; // min mWBTC share to withdraw as profit during prepareReturn()
 	
     /**
      * @notice This Strategy's name.
@@ -98,6 +99,10 @@ contract Strategy is BaseStrategy {
 
     function setMinMMToSwap(uint256 _minMMToSwap) external onlyAuthorized {
         minMMToSwap = _minMMToSwap;
+    }   
+
+    function setMinShareToProfit(uint256 _minShareToProfit) external onlyAuthorized {
+        minShareToProfit = _minShareToProfit;
     }
     
 	/**
@@ -178,20 +183,43 @@ contract Strategy is BaseStrategy {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-    ){		
+    ){			
+		
         // Pay debt if any
         if (_debtOutstanding > 0) {
             (uint256 _amountFreed, uint256 _reportLoss) = liquidatePosition(_debtOutstanding);
             _debtPayment = _amountFreed > _debtOutstanding? _debtOutstanding : _amountFreed;
             _loss = _reportLoss;
-        }
+        }	
 		
-        // Claim profit
+        // Capture some additional profit if underlying vault get appreciation
+        uint256 debt = vault.strategies(address(this)).totalDebt;
+        uint256 currentValue = estimatedTotalAssets().sub(_debtPayment);
+        if (currentValue > debt){
+            uint256 target = currentValue.sub(debt);
+            uint256 _beforeWant = want.balanceOf(address(this));
+            uint256 _withdrawMShare = _convertWantToMToken(target);
+            if (_withdrawMShare > minShareToProfit){
+                uint256 _mmVault = IERC20(mmVault).balanceOf(address(this));
+                if (_mmVault < _withdrawMShare){
+                    _withdrawFromFarming(_withdrawMShare, _mmVault);
+                }
+                MMVault(mmVault).withdraw(_withdrawMShare);
+                uint256 _afterWant = want.balanceOf(address(this));
+                if (_afterWant > _beforeWant){
+                    uint256 actual = _afterWant.sub(_beforeWant);
+                    _profit = _profit.add(actual);
+                    _loss = _loss.add(actual < target? target.sub(actual) : 0);
+                }			
+            }
+        }		
+		
+        // Claim $MM profit
         uint256 _pendingMM = MMFarmingPool(mmFarmingPool).pendingMM(mmFarmingPoolId, address(this));
         if (_pendingMM > 0){
             MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, 0);		
         }
-        _profit = _disposeOfMM();
+        _profit = _profit.add(_disposeOfMM());
 				
         return (_profit, _loss, _debtPayment);
     }
@@ -256,14 +284,11 @@ contract Strategy is BaseStrategy {
             uint256 _before = IERC20(want).balanceOf(address(this));
             if (_before < _amountNeeded){            
                uint256 _gap = _amountNeeded.sub(_before);	
-               uint256 _mShare = _gap.mul(1e18).div(MMVault(mmVault).getRatio());			
+               uint256 _mShare = _convertWantToMToken(_gap);			
                
                uint256 _mmVault = IERC20(mmVault).balanceOf(address(this));
                if (_mmVault < _mShare){
-                   uint256 _mvGap = _mShare.sub(_mmVault); 			
-                   (uint256 _mToken, ) = MMFarmingPool(mmFarmingPool).userInfo(mmFarmingPoolId, address(this));
-                   require(_mToken >= _mvGap, '!insufficientMTokenInMasterChef');		
-                   MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, _mvGap);
+                   _withdrawFromFarming(_mShare, _mmVault);
                }
                MMVault(mmVault).withdraw(_mShare);
                uint256 _after = IERC20(want).balanceOf(address(this));
@@ -360,6 +385,17 @@ contract Strategy is BaseStrategy {
         }
         uint256 _wantInVault = MMVault(mmVault).balance();
         return (_wantInVault.mul(_shares)).div(_mTokenTotal);
+    }
+	
+    function _convertWantToMToken(uint256 _want) internal view returns (uint256){
+        return _want.mul(1e18).div(MMVault(mmVault).getRatio());
+    }	
+	
+    function _withdrawFromFarming(uint256 _target, uint256 _balance) internal {
+        uint256 _mvGap = _target.sub(_balance); 			
+        (uint256 _mToken, ) = MMFarmingPool(mmFarmingPool).userInfo(mmFarmingPoolId, address(this));
+        require(_mToken >= _mvGap, '!insufficientMTokenInMasterChef');		
+        MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, _mvGap);	
     }
 	
     // swap $MM for $WBTC
