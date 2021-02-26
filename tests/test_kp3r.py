@@ -38,10 +38,12 @@ def sushiswapOracle(interface):
 
 @pytest.fixture
 def genericKp3r(pm, mmDeployer, yearnDeployer, mmController, kp3rToken, kp3rHelper, uniswapOracle, sushiswapOracle):
-    genericKp3r = GenericKeep3rV2.deploy(kp3rToken, kp3rHelper, uniswapOracle, sushiswapOracle, mmController, {"from": mmDeployer}) # TODO use mainnet deployed fork
+    #genericKp3r = GenericKeep3rV2.deploy(kp3rToken, kp3rHelper, uniswapOracle, sushiswapOracle, mmController, {"from": mmDeployer}) # TODO use mainnet deployed fork
+    genericKp3r = interface.MMGenericKp3r("0x0bD1d668d8E83d14252F2e01D5873df77A6511f0")
     
-    interface.KP3RV1(kp3rToken).addJob(genericKp3r, {"from": yearnDeployer})
-    interface.KP3RV1(kp3rToken).addKPRCredit(genericKp3r, 10000 * 1e18, {"from": yearnDeployer})
+    if(interface.KP3RV1(kp3rToken).jobs(genericKp3r) == False):
+       interface.KP3RV1(kp3rToken).addJob(genericKp3r, {"from": yearnDeployer})    
+       interface.KP3RV1(kp3rToken).addKPRCredit(genericKp3r, 10000 * 1e18, {"from": yearnDeployer})
     
     strategies = interface.MMGenericKp3r(genericKp3r).getStrategies()
     for strat in strategies:
@@ -102,7 +104,7 @@ def test_add_remove(pm, mmDeployer, genericKp3r, kp3rStrategies, kp3rVaults):
     strategiesLenPreAdd = len(genericKp3r.getStrategies())
        
     genericKp3r.addVault(mDAI, 10000 * 1e18, {"from": mmDeployer})
-    genericKp3r.addStrategy(mDAI, mmDAIStrategy, 700000, False, True, genericKp3r.COMP(), genericKp3r.SUSHISWAP_ORACLE(), {"from": mmDeployer})
+    genericKp3r.addStrategy(mDAI, mmDAIStrategy, 700000, False, True, "0xc00e94Cb662C3520282E6f5717214004A7f26888", 1, {"from": mmDeployer})
 
     assert (vaultsLenPreAdd + 1) == len(genericKp3r.getVaults())
     assert (strategiesLenPreAdd + 1) == len(genericKp3r.getStrategies())

@@ -5,6 +5,7 @@
 pragma solidity 0.6.12;
 
 interface KP3RV1 {
+    function jobs(address job) external view returns(bool);
     function addJob(address job) external;
     function addKPRCredit(address job, uint amount) external;
 }
