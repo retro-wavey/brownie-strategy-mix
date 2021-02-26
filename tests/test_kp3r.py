@@ -82,6 +82,33 @@ def test_earn(pm, mmDeployer, genericKp3r, kp3rVaults):
     for vault in kp3rVaults:
         _earn(mmDeployer, genericKp3r, vault)
 
+@pytest.mark.require_network("mainnet-fork")        
+def test_add_remove(pm, mmDeployer, genericKp3r, kp3rStrategies, kp3rVaults):
+    mDAI = interface.MMVault("0x6802377968857656fE8aE47fBECe76AaE588eeF7")
+    mmDAIStrategy = interface.MMStrategy("0xc48E1e2a61121c84D96957e696A4A283615559d1")
+    
+    # Remove mmDAIStrategy & mDAI
+    vaultsLenPreRemove = len(kp3rVaults)
+    strategiesLenPreRemove = len(kp3rStrategies)
+       
+    genericKp3r.removeHarvestStrategy(mmDAIStrategy, {"from": mmDeployer})
+    genericKp3r.removeEarnVault(mDAI, {"from": mmDeployer})
+
+    assert (vaultsLenPreRemove - 1) == len(genericKp3r.getVaults())
+    assert (strategiesLenPreRemove - 1) == len(genericKp3r.getStrategies())
+    
+    # Add back mDAI & mmDAIStrategy
+    vaultsLenPreAdd = len(genericKp3r.getVaults())
+    strategiesLenPreAdd = len(genericKp3r.getStrategies())
+       
+    genericKp3r.addVault(mDAI, 10000 * 1e18, {"from": mmDeployer})
+    genericKp3r.addStrategy(mDAI, mmDAIStrategy, 700000, False, True, genericKp3r.COMP(), genericKp3r.SUSHISWAP_ORACLE(), {"from": mmDeployer})
+
+    assert (vaultsLenPreAdd + 1) == len(genericKp3r.getVaults())
+    assert (strategiesLenPreAdd + 1) == len(genericKp3r.getStrategies())
+    _earn(mmDeployer, genericKp3r, mDAI)
+    _harvest(mmDeployer, genericKp3r, mmDAIStrategy)
+
 ####################### test dependent functions ########################################
 
 def _add_keeper(mmDeployer, genericKp3r, vault):
