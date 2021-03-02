@@ -14,7 +14,7 @@ dependencies:
 # path remapping to support imports from GitHub/NPM
 compiler:
   solc:
-    version: null #0.6.12
+    version: 0.6.12
     remappings:
       - "@yearnvaults=iearn-finance/yearn-vaults@0.3.2"
       - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.1.0"
