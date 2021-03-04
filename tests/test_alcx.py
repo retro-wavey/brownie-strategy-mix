@@ -14,7 +14,7 @@ def mmDeployer(accounts):
     
 @pytest.fixture
 def alcxWhale(accounts):
-    yield accounts.at("0x6206E425BC584AC757E28BCc5555a44Ace4bCfa0", force=True)
+    yield accounts.at("0x000000000000000000000000000000000000dead", force=True)
    
 @pytest.fixture
 def alcxToken(interface):

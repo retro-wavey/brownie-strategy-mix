@@ -14,7 +14,7 @@ def mmDeployer(accounts):
     
 @pytest.fixture
 def alusdWhale(accounts):
-    yield accounts.at("0x0f87DD03a74e6a48D56661d96f44880C79b9d795", force=True)
+    yield accounts.at("0x4740fa6b32c5b41ebbf631fe1af41e6fff6e2388", force=True)
    
 @pytest.fixture
 def alusdToken(interface):
