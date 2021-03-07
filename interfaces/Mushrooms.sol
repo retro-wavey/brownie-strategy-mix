@@ -20,6 +20,7 @@ interface MMVault {
 interface MMStrategy {
     function harvest() external;
     function setStrategist(address _strategist) external;
+    function setBuybackEnabled(bool _enable) external;
 }
 
 interface MMFarmingPool {
@@ -32,7 +33,8 @@ interface MMFarmingPool {
 
 interface MMController {
     function approveStrategy(address _token, address _strategy) external;
-    function setStrategy(address _token, address _strategy) external;
+    function setStrategy(address _token, address _strategy) external;	
+    function vaults(address _token) external view returns(address);
     function setVault(address _token, address _vault) external;
     function withdrawAll(address _token) external;
 }
