@@ -6,11 +6,15 @@
 import pytest
 import time
 from brownie import Wei, accounts, Contract, config, interface, chain
-from brownie import StrategyAlchemixALCX, MMVault, ControllerV3
+# from brownie import StrategyAlchemixALCX, MMVault, ControllerV3
 
 @pytest.fixture
 def mmDeployer(accounts):
     yield accounts.at("0x43229759E12eFbe3e2A0fB0510B15e516d046442", force=True)
+    
+@pytest.fixture
+def mmTimelock(accounts):
+    yield accounts.at("0x5DAe9B27313670663B34Ac8BfFD18825bB9Df736", force=True)
     
 @pytest.fixture
 def alcxWhale(accounts):
@@ -22,24 +26,27 @@ def alcxToken(interface):
    
 @pytest.fixture
 def mmController(pm, mmDeployer):
-    mmController = mmDeployer.deploy(ControllerV3, mmDeployer, mmDeployer, mmDeployer, mmDeployer, mmDeployer)
-    # TODO use mainnet controller
+    # mmController = mmDeployer.deploy(ControllerV3, mmDeployer, mmDeployer, mmDeployer, mmDeployer, mmDeployer)
+    mmController = interface.MMController("0x4bf5059065541a2b176500928e91fbfd0b121d07")
     yield mmController
    
 @pytest.fixture
 def alcxVault(pm, alcxToken, mmDeployer, mmController):
-    alcxVault = mmDeployer.deploy(MMVault, alcxToken, mmDeployer, mmDeployer, mmController)
-    # TODO use mainnet vault
-    mmController.setVault(alcxToken, alcxVault, {"from": mmDeployer})
+    # alcxVault = mmDeployer.deploy(MMVault, alcxToken, mmDeployer, mmDeployer, mmController)
+    alcxVault = interface.MMVault("0x076950237f8c0D27Ac25694c9078F96e535723BC")
+    
+    if(mmController.vaults(alcxToken) == "0x0000000000000000000000000000000000000000"):    
+       mmController.setVault(alcxToken, alcxVault, {"from": mmDeployer})
+    
     yield alcxVault
  
 @pytest.fixture
-def alcxStrategy(pm, alcxToken, mmDeployer, mmController):
-    alcxStrategy = mmDeployer.deploy(StrategyAlchemixALCX, mmDeployer, mmDeployer, mmController, mmDeployer)
-    mmController.approveStrategy(alcxToken, alcxStrategy, {"from": mmDeployer}) 
-    # TODO use mainnet strategy     
+def alcxStrategy(pm, alcxToken, mmDeployer, mmController, mmTimelock):
+    # alcxStrategy = mmDeployer.deploy(StrategyAlchemixALCX, mmDeployer, mmDeployer, mmController, mmDeployer)
+    alcxStrategy = interface.MMStrategy("0x27BF4D326A4F11A11A72A07F38DA64D2F502A23B")   
+    mmController.approveStrategy(alcxToken, alcxStrategy, {"from": mmTimelock}) 
     mmController.setStrategy(alcxToken, alcxStrategy, {"from": mmDeployer})
-    alcxStrategy.setBuybackEnabled(False)
+    alcxStrategy.setBuybackEnabled(False, {"from": mmDeployer})
     yield alcxStrategy
     
 @pytest.mark.require_network("mainnet-fork")
@@ -77,7 +84,7 @@ def test_withdraw_all(pm, mmDeployer, alcxWhale, alcxToken, alcxVault, alcxStrat
     assert alcxVault.getRatio() > 1e18 
     
     # withdraw all from strategy  
-    mmController.withdrawAll(alcxToken)  
+    mmController.withdrawAll(alcxToken, {"from": mmDeployer})  
     assert alcxToken.balanceOf(alcxVault) >= amount 
 
 
@@ -97,8 +104,9 @@ def _depositAndHarvest(mmDeployer, alcxWhale, alcxToken, alcxVault, alcxStrategy
     alcxVault.deposit(depositAmount, {"from": alcxWhale})     
     assert alcxVault.balanceOf(alcxWhale) == depositAmount
     
+    bal = alcxToken.balanceOf(alcxVault)
     alcxVault.earn({"from": mmDeployer})   
-    assert alcxToken.balanceOf(alcxVault) <= _reserve_mushrooms_vault(depositAmount)  
+    assert alcxToken.balanceOf(alcxVault) <= _reserve_mushrooms_vault(bal)  
 
     endMineTime = (int)(time.time() + 2592000 * 1) # mine to 30 days later
     chain.mine(blocks=300, timestamp=endMineTime) 

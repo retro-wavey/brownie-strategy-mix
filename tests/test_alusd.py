@@ -6,15 +6,19 @@
 import pytest
 import time
 from brownie import Wei, accounts, Contract, config, interface, chain
-from brownie import StrategyAlchemixALUSD, MMVault, ControllerV3
+# from brownie import StrategyAlchemixALUSD, MMVault, ControllerV3
 
 @pytest.fixture
 def mmDeployer(accounts):
     yield accounts.at("0x43229759E12eFbe3e2A0fB0510B15e516d046442", force=True)
     
 @pytest.fixture
+def mmTimelock(accounts):
+    yield accounts.at("0x5DAe9B27313670663B34Ac8BfFD18825bB9Df736", force=True)
+    
+@pytest.fixture
 def alusdWhale(accounts):
-    yield accounts.at("0x4740fa6b32c5b41ebbf631fe1af41e6fff6e2388", force=True)
+    yield accounts.at("0x820f92c1B3aD8E962E6C6D9d7CaF2a550Aec46fB", force=True)
    
 @pytest.fixture
 def alusdToken(interface):
@@ -22,24 +26,27 @@ def alusdToken(interface):
    
 @pytest.fixture
 def mmController(pm, mmDeployer):
-    mmController = mmDeployer.deploy(ControllerV3, mmDeployer, mmDeployer, mmDeployer, mmDeployer, mmDeployer)
-    # TODO use mainnet controller
+    # mmController = mmDeployer.deploy(ControllerV3, mmDeployer, mmDeployer, mmDeployer, mmDeployer, mmDeployer)
+    mmController = interface.MMController("0x4bf5059065541a2b176500928e91fbfd0b121d07")
     yield mmController
    
 @pytest.fixture
 def alusdVault(pm, alusdToken, mmDeployer, mmController):
-    alusdVault = mmDeployer.deploy(MMVault, alusdToken, mmDeployer, mmDeployer, mmController)
-    # TODO use mainnet vault
-    mmController.setVault(alusdToken, alusdVault, {"from": mmDeployer})
+    # alusdVault = mmDeployer.deploy(MMVault, alusdToken, mmDeployer, mmDeployer, mmController)
+    alusdVault = interface.MMVault("0x5DEDEC994C11aB5F9908f33Aed2947F33B67a449")
+    
+    if(mmController.vaults(alusdToken) == "0x0000000000000000000000000000000000000000"): 
+       mmController.setVault(alusdToken, alusdVault, {"from": mmDeployer})
+       
     yield alusdVault
  
 @pytest.fixture
-def alusdStrategy(pm, alusdToken, mmDeployer, mmController):
-    alusdStrategy = mmDeployer.deploy(StrategyAlchemixALUSD, mmDeployer, mmDeployer, mmController, mmDeployer)
-    mmController.approveStrategy(alusdToken, alusdStrategy, {"from": mmDeployer}) 
-    # TODO use mainnet strategy     
+def alusdStrategy(pm, alusdToken, mmDeployer, mmController, mmTimelock):
+    # alusdStrategy = mmDeployer.deploy(StrategyAlchemixALUSD, mmDeployer, mmDeployer, mmController, mmDeployer)
+    alusdStrategy = interface.MMStrategy("0x263a8a6CAC9F58e78413497fC913Fe38bFc45B3b") 
+    mmController.approveStrategy(alusdToken, alusdStrategy, {"from": mmTimelock})  
     mmController.setStrategy(alusdToken, alusdStrategy, {"from": mmDeployer})
-    alusdStrategy.setBuybackEnabled(False)
+    alusdStrategy.setBuybackEnabled(False, {"from": mmDeployer})
     yield alusdStrategy
     
 @pytest.mark.require_network("mainnet-fork")
@@ -49,7 +56,7 @@ def test_normal_flow(pm, mmDeployer, alusdWhale, alusdToken, alusdVault, alusdSt
     prevBal = alusdToken.balanceOf(alusdWhale) 
     
     # deposit -> harvest    
-    amount = 40000 * 1e18
+    amount = 2000 * 1e18
     _depositAndHarvest(mmDeployer, alusdWhale, alusdToken, alusdVault, alusdStrategy, amount)
     
     # Aha, we got vault appreciation by yielding $ALCX!
@@ -70,14 +77,14 @@ def test_withdraw_all(pm, mmDeployer, alusdWhale, alusdToken, alusdVault, alusdS
     prevBal = alusdToken.balanceOf(alusdWhale) 
     
     # deposit -> harvest   
-    amount = 40000 * 1e18
+    amount = 2000 * 1e18
     _depositAndHarvest(mmDeployer, alusdWhale, alusdToken, alusdVault, alusdStrategy, amount)
     
     # Aha, we got vault appreciation by yielding $ALCX!
     assert alusdVault.getRatio() > 1e18 
     
     # withdraw all from strategy  
-    mmController.withdrawAll(alusdToken)  
+    mmController.withdrawAll(alusdToken, {"from": mmDeployer})  
     assert alusdToken.balanceOf(alusdVault) >= amount 
 
 
@@ -97,8 +104,9 @@ def _depositAndHarvest(mmDeployer, alusdWhale, alusdToken, alusdVault, alusdStra
     alusdVault.deposit(depositAmount, {"from": alusdWhale})     
     assert alusdVault.balanceOf(alusdWhale) == depositAmount
     
+    bal = alusdToken.balanceOf(alusdVault)
     alusdVault.earn({"from": mmDeployer})   
-    assert alusdToken.balanceOf(alusdVault) <= _reserve_mushrooms_vault(depositAmount)  
+    assert alusdToken.balanceOf(alusdVault) <= _reserve_mushrooms_vault(bal)  
 
     endMineTime = (int)(time.time() + 2592000 * 1) # mine to 30 days later
     chain.mine(blocks=300, timestamp=endMineTime) 
