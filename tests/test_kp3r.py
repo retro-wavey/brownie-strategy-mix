@@ -69,22 +69,22 @@ def kp3rCollateralizedStrategies(pm, genericKp3r):
 def kp3rVaults(pm, genericKp3r):    
     yield interface.MMGenericKp3r(genericKp3r).getVaults()
 
-@pytest.mark.require_network("mainnet-fork1")
+@pytest.mark.require_network("mainnet-fork")
 def test_harvest(pm, mmDeployer, genericKp3r, kp3rStrategies):
     for strat in kp3rStrategies:
         _harvest(mmDeployer, genericKp3r, strat)
         
-@pytest.mark.require_network("mainnet-fork1")
+@pytest.mark.require_network("mainnet-fork")
 def test_keep_min_ratio(pm, mmDeployer, genericKp3r, kp3rCollateralizedStrategies):
     for strat in kp3rCollateralizedStrategies:
         _keepMinRatio(mmDeployer, genericKp3r, strat)
         
-@pytest.mark.require_network("mainnet-fork1")
+@pytest.mark.require_network("mainnet-fork")
 def test_earn(pm, mmDeployer, genericKp3r, kp3rVaults):
     for vault in kp3rVaults:
         _earn(mmDeployer, genericKp3r, vault)
 
-@pytest.mark.require_network("mainnet-fork1")        
+@pytest.mark.require_network("mainnet-fork")        
 def test_add_remove(pm, mmDeployer, genericKp3r, kp3rStrategies, kp3rVaults):
     mDAI = interface.MMVault("0x6802377968857656fE8aE47fBECe76AaE588eeF7")
     mmDAIStrategy = interface.MMStrategy("0xc48E1e2a61121c84D96957e696A4A283615559d1")

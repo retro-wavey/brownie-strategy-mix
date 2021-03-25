@@ -148,7 +148,7 @@ def mmVault(interface):
     
 @pytest.fixture
 def mmStrategy(interface):
-    yield interface.MMStrategy("0xc8EBBaAaD5fF2e5683f8313fd4D056b7Ff738BeD")
+    yield interface.MMStrategy("0xa6f43d225d188AeF31F99F20eBa8E537a6DE86B5")
 
 @pytest.fixture
 def yWbtc(pm, yfiDeployer, wbtcToken):
