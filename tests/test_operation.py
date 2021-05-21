@@ -55,11 +55,14 @@ def test_emergency_exit(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, 
 def test_ratio_adjustment(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc, yWbtcStrategy, mmFarmingPool, mmVault, mmStrategy):
          
     # deposit -> harvest   
-    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper, mmVault, mmStrategy)
+    depositAmount = _depositAndHarvest(yWbtc, wbtcWhale, wbtcToken, yWbtcStrategy, yfiDeployer, mmKeeper, mmVault, mmStrategy, 1000_000_000)
     
     # lower debtRatio from 10_000 to 5000  
     assert wbtcToken.balanceOf(yWbtc) == 0
     yWbtc.updateStrategyDebtRatio(yWbtcStrategy, 5000, {"from": yfiDeployer})
+    # Advancing blocks  
+    _mmEarnAndHarvest(mmKeeper, mmVault, mmStrategy)     
+    chain.mine(blocks=300)
     yWbtcStrategy.harvest({"from": yfiDeployer})  
     
     # we should have returned nearly half of fund    
@@ -67,7 +70,8 @@ def test_ratio_adjustment(pm, yfiDeployer, wbtcWhale, mmKeeper, wbtcToken, yWbtc
     
     # increase debtRatio from 5000 to 7500 
     yWbtc.updateStrategyDebtRatio(yWbtcStrategy, 7500, {"from": yfiDeployer})
-    # Advancing blocks    
+    # Advancing blocks  
+    _mmEarnAndHarvest(mmKeeper, mmVault, mmStrategy)     
     chain.mine(blocks=300)
     yWbtcStrategy.harvest({"from": yfiDeployer})          
     assert yWbtcStrategy.estimatedTotalAssets() >= _deduct_mushrooms_fee(depositAmount) * (7500 / 10_000)

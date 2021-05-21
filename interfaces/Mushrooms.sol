@@ -21,6 +21,12 @@ interface MMStrategy {
     function harvest() external;
     function setStrategist(address _strategist) external;
     function setBuybackEnabled(bool _enable) external;
+    function leverageToMax() external;
+    function deleverageToMin() external;
+    function getBorrowedView() external view returns (uint256);
+    function getSuppliedView() external view returns (uint256);
+    function requiredPaidDebt(uint256 _redeemCollateralAmt) external view returns (uint256);
+    function balanceOfPool() external view returns (uint256);
 }
 
 interface MMFarmingPool {
