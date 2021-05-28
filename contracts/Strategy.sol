@@ -220,8 +220,8 @@ contract Strategy is BaseStrategy {
             MMFarmingPool(mmFarmingPool).withdraw(mmFarmingPoolId, 0);		
         }
         _profit = _profit.add(_disposeOfMM());
-				
-        return (_profit, _loss, _debtPayment);
+		
+        return (_profit, 0, _debtPayment);
     }
 
     /**
