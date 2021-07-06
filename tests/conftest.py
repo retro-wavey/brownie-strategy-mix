@@ -128,7 +128,7 @@ def yfiDeployer(accounts):
 
 @pytest.fixture
 def wbtcWhale(accounts):
-    yield accounts.at("0x875abe6F1E2Aba07bED4A3234d8555A0d7656d12", force=True)
+    yield accounts.at("0xaf306bad224f70d6e1971ba17d97c144cab119e4", force=True)
     
 @pytest.fixture
 def mmKeeper(accounts):
