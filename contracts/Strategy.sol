@@ -210,6 +210,14 @@ contract Strategy is BaseStrategy {
                     uint256 actual = _afterWant.sub(_beforeWant);
                     _profit = _profit.add(actual);
                     _loss = _loss.add(actual < target? target.sub(actual) : 0);
+		    if(_profit > _loss){
+		        _profit.sub(_loss);
+			_loss = 0;
+		    }
+		    else{
+		        _loss.sub(_profit);
+			_profit = 0;
+		    }
                 }			
             }
         }		
