@@ -194,7 +194,7 @@ contract Strategy is BaseStrategy {
 		
         // Capture some additional profit if underlying vault get appreciation
         uint256 debt = vault.strategies(address(this)).totalDebt;
-        uint256 currentValue = estimatedTotalAssets().sub(_debtPayment);
+        uint256 currentValue = estimatedTotalAssets();
         if (currentValue > debt){
             uint256 target = currentValue.sub(debt);
             uint256 _beforeWant = want.balanceOf(address(this));
