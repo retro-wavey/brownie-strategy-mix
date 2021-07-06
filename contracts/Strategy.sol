@@ -229,7 +229,7 @@ contract Strategy is BaseStrategy {
         }
         _profit = _profit.add(_disposeOfMM());
 		
-        return (_profit, 0, _debtPayment);
+        return (_profit, _loss, _debtPayment);
     }
 
     /**
